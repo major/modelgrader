@@ -1,6 +1,7 @@
 """Google Gemini-based grading system for LLM responses."""
 
-import re
+import json
+from typing import TypedDict
 
 import google.generativeai as genai
 
@@ -8,6 +9,15 @@ from modelgrader.logging import get_logger
 from modelgrader.models import GradeBreakdown
 
 logger = get_logger(__name__)
+
+
+class GradingResponse(TypedDict):
+    """Structured response schema for Gemini grading."""
+
+    accuracy: int
+    completeness: int
+    clarity: int
+    explanation: str
 
 
 def configure_gemini(api_key: str) -> None:
@@ -32,8 +42,8 @@ def grade_response(
     Args:
         question: The original question
         response: The model's response to grade
-        context: Optional context that was provided
-        response_time: Time taken to generate response (seconds)
+        context: Optional context that was provided (not used in grading)
+        response_time: Time taken to generate response (not used in grading)
         model_name: Gemini model to use for grading
 
     Returns:
@@ -47,24 +57,56 @@ def grade_response(
         response_time=round(response_time, 2),
     )
 
-    # Create grading prompt
-    grading_prompt = _create_grading_prompt(question, response, context, response_time)
+    # Create grading prompt (context not included in grading)
+    grading_prompt = _create_grading_prompt(question, response)
 
     try:
-        # Use Gemini to grade the response
-        model = genai.GenerativeModel(model_name)  # type: ignore[attr-defined]
+        # Use Gemini to grade the response with structured output
+        model = genai.GenerativeModel(  # type: ignore[attr-defined]
+            model_name,
+            generation_config={  # type: ignore[arg-type]
+                "response_mime_type": "application/json",
+                "response_schema": GradingResponse,
+            },
+        )
         result = model.generate_content(grading_prompt)  # type: ignore[attr-defined]
-        grade_text = result.text  # type: ignore[attr-defined]
 
-        # Parse the grades from the response
-        grades = _parse_grades(grade_text)
+        # Parse JSON response directly
+        grading_data = json.loads(result.text)  # type: ignore[attr-defined]
+
+        logger.debug("parsed_grading_data", data=grading_data)
+
+        # Validate required fields are present
+        required_fields = ["accuracy", "completeness", "clarity"]
+        missing_fields = [f for f in required_fields if f not in grading_data]
+        if missing_fields:
+            logger.warning(
+                "missing_required_fields",
+                fields=missing_fields,
+                response=result.text[:500],  # type: ignore[attr-defined]
+                available_keys=list(grading_data.keys()),
+            )
+            # Provide default values for missing fields
+            for field in missing_fields:
+                grading_data[field] = 50  # Default to middle score
+
+        # Validate and clamp scores
+        accuracy = min(100, max(0, int(grading_data.get("accuracy", 50))))
+        completeness = min(100, max(0, int(grading_data.get("completeness", 50))))
+        clarity = min(100, max(0, int(grading_data.get("clarity", 50))))
+
+        grades = GradeBreakdown(
+            accuracy=accuracy,
+            completeness=completeness,
+            clarity=clarity,
+            explanation=grading_data.get("explanation", "No explanation provided."),
+        )
 
         logger.info(
             "grading_complete",
             accuracy=grades.accuracy,
             completeness=grades.completeness,
             clarity=grades.clarity,
-            response_time_score=grades.response_time_score,
             total=grades.total,
         )
 
@@ -75,27 +117,16 @@ def grade_response(
         raise
 
 
-def _create_grading_prompt(
-    question: str, response: str, context: str | None, response_time: float
-) -> str:
+def _create_grading_prompt(question: str, response: str) -> str:
     """Create a detailed grading prompt for Gemini.
 
     Args:
         question: The original question
         response: The model's response
-        context: Optional context provided
-        response_time: Response time in seconds
 
     Returns:
         Formatted grading prompt
     """
-    context_section = ""
-    if context:
-        context_section = f"""
-CONTEXT PROVIDED TO MODEL:
-{context}
-"""
-
     return f"""You are a STRICT expert grader evaluating LLM responses about Red Hat Enterprise Linux system administration.
 
 CRITICAL INSTRUCTIONS:
@@ -105,11 +136,9 @@ CRITICAL INSTRUCTIONS:
 
 ORIGINAL QUESTION:
 {question}
-{context_section}
+
 MODEL'S RESPONSE:
 {response}
-
-RESPONSE TIME: {response_time:.2f} seconds
 
 Grade this response on a 100-point scale for each category. IMPORTANT: Scores above 85 should be RARE and only given to exceptional responses. Most good responses should fall in the 60-80 range.
 
@@ -148,15 +177,6 @@ Grade each category independently using CONSISTENT criteria:
    - Missing helpful formatting: deduct 5-10 points
    - Professional but not exceptional: 60-75
 
-4. RESPONSE TIME (0-100): Response time performance
-   - 0-2 seconds: 95-100
-   - 2-4 seconds: 80-94
-   - 4-6 seconds: 65-79
-   - 6-8 seconds: 50-64
-   - 8-12 seconds: 30-49
-   - 12-20 seconds: 10-29
-   - Over 20 seconds: 0-9
-
 CRITICAL GRADING RULES FOR CONSISTENCY:
 - Start by assuming a baseline of 70, then deduct points for any issues
 - Only exceptional responses with zero flaws should score above 85
@@ -172,64 +192,15 @@ Before assigning scores, ask yourself:
 2. Would I deduct the same points if I saw this exact issue in a different response?
 3. Am I being influenced by the overall quality, or grading each dimension independently?
 
-Provide your grades in this EXACT format (use actual numbers 0-100):
-ACCURACY: [score]
-COMPLETENESS: [score]
-CLARITY: [score]
-RESPONSE_TIME: [score]
-
-Then provide a brief justification for each score, explicitly noting what prevented a higher score and what specific deductions were applied.
+Provide your response as a JSON object with these fields:
+- accuracy: integer score 0-100
+- completeness: integer score 0-100
+- clarity: integer score 0-100
+- explanation: brief justification (1-2 sentences) for the scores, explicitly noting what prevented higher scores and what specific deductions were applied
 
 Note: These scores will be weighted as follows for the final grade:
 - Accuracy: 50%
-- Completeness: 20%
-- Clarity: 20%
-- Response Time: 10%"""
+- Completeness: 25%
+- Clarity: 25%"""
 
 
-def _parse_grades(grade_text: str) -> GradeBreakdown:
-    """Parse grades from Gemini's response.
-
-    Args:
-        grade_text: Gemini's grading response
-
-    Returns:
-        GradeBreakdown object
-
-    Raises:
-        ValueError: If grades cannot be parsed
-    """
-    # Extract scores using regex (allow negative numbers for clamping)
-    accuracy_match = re.search(r"ACCURACY:\s*(-?\d+)", grade_text, re.IGNORECASE)
-    completeness_match = re.search(r"COMPLETENESS:\s*(-?\d+)", grade_text, re.IGNORECASE)
-    clarity_match = re.search(r"CLARITY:\s*(-?\d+)", grade_text, re.IGNORECASE)
-    response_time_match = re.search(
-        r"RESPONSE_TIME:\s*(-?\d+)", grade_text, re.IGNORECASE
-    )
-
-    if not all([
-        accuracy_match,
-        completeness_match,
-        clarity_match,
-        response_time_match,
-    ]):
-        logger.error("failed_to_parse_grades", grade_text=grade_text)
-        raise ValueError(f"Could not parse grades from: {grade_text}")
-
-    accuracy = int(accuracy_match.group(1))  # type: ignore[union-attr]
-    completeness = int(completeness_match.group(1))  # type: ignore[union-attr]
-    clarity = int(clarity_match.group(1))  # type: ignore[union-attr]
-    response_time_score = int(response_time_match.group(1))  # type: ignore[union-attr]
-
-    # Validate ranges (all are 0-100 percentiles now)
-    accuracy = min(100, max(0, accuracy))
-    completeness = min(100, max(0, completeness))
-    clarity = min(100, max(0, clarity))
-    response_time_score = min(100, max(0, response_time_score))
-
-    return GradeBreakdown(
-        accuracy=accuracy,
-        completeness=completeness,
-        clarity=clarity,
-        response_time_score=response_time_score,
-    )

@@ -44,28 +44,25 @@ class TestGradeBreakdown:
     """Tests for GradeBreakdown model."""
 
     @pytest.mark.parametrize(
-        "accuracy,completeness,clarity,response_time,expected_total",
+        "accuracy,completeness,clarity,expected_total",
         [
-            (100, 100, 100, 100, 100.0),  # Perfect score
-            (50, 50, 50, 50, 50.0),  # All 50%
-            (80, 70, 60, 90, 75.0),  # Mixed scores
-            (0, 0, 0, 0, 0.0),  # Zero score
+            (100, 100, 100, 100.0),  # Perfect score
+            (50, 50, 50, 50.0),  # All 50%
+            (80, 70, 60, 72.5),  # Mixed scores: 80*0.5 + 70*0.25 + 60*0.25 = 72.5
+            (0, 0, 0, 0.0),  # Zero score
         ],
     )
     def test_weighted_score_calculation(
-        self, accuracy, completeness, clarity, response_time, expected_total
+        self, accuracy, completeness, clarity, expected_total
     ):
         """Test weighted score calculation with various inputs."""
         grades = GradeBreakdown(
             accuracy=accuracy,
             completeness=completeness,
             clarity=clarity,
-            response_time_score=response_time,
         )
-        # Weighted: 50% accuracy + 20% completeness + 20% clarity + 10% response_time
-        expected = (
-            accuracy * 0.5 + completeness * 0.2 + clarity * 0.2 + response_time * 0.1
-        )
+        # Weighted: 50% accuracy + 25% completeness + 25% clarity
+        expected = accuracy * 0.5 + completeness * 0.25 + clarity * 0.25
         assert grades.weighted_score == round(expected, 2)
         assert grades.total == grades.weighted_score
 
@@ -76,7 +73,6 @@ class TestGradeBreakdown:
                 accuracy=101,  # Over 100
                 completeness=50,
                 clarity=50,
-                response_time_score=50,
             )
 
         with pytest.raises(ValueError):
@@ -84,7 +80,6 @@ class TestGradeBreakdown:
                 accuracy=50,
                 completeness=-1,  # Negative
                 clarity=50,
-                response_time_score=50,
             )
 
 

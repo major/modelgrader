@@ -45,7 +45,6 @@ def sample_grade_breakdown():
         accuracy=85,
         completeness=75,
         clarity=80,
-        response_time_score=90,
     )
 
 
@@ -75,7 +74,6 @@ def multiple_test_results():
             accuracy=70 + i * 2,
             completeness=60 + i * 3,
             clarity=65 + i * 2,
-            response_time_score=80 + i,
         )
         result = TestResult(
             model_name=f"model-{i}",

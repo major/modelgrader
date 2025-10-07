@@ -44,27 +44,24 @@ class GradeBreakdown(BaseModel):
         le=100,
         description="Clarity score (0-100)",
     )
-    response_time_score: int = Field(
-        ...,
-        ge=0,
-        le=100,
-        description="Response time score (0-100)",
+    explanation: str = Field(
+        default="",
+        description="Grading justification (1-2 sentences)",
     )
 
     @property
     def weighted_score(self) -> float:
         """Calculate weighted score based on category weights.
 
-        Weights: Accuracy 50%, Completeness 20%, Clarity 20%, Response Time 10%
+        Weights: Accuracy 50%, Completeness 25%, Clarity 25%
 
         Returns:
             Weighted score (0-100)
         """
         return round(
             (self.accuracy * 0.5)
-            + (self.completeness * 0.2)
-            + (self.clarity * 0.2)
-            + (self.response_time_score * 0.1),
+            + (self.completeness * 0.25)
+            + (self.clarity * 0.25),
             2,
         )
 
@@ -112,6 +109,7 @@ class TestResult(BaseModel):
             "Response time": round(self.response_time, 2),
             "Weighted Score": self.total_score,
             "Percentile Rank": round(self.percentile, 1),
+            "Explanation": self.grades.explanation,
         }
 
 

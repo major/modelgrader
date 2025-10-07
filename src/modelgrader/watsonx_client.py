@@ -4,6 +4,7 @@ import time
 
 from ibm_watsonx_ai import APIClient, Credentials
 from ibm_watsonx_ai.foundation_models.inference import ModelInference
+from ibm_watsonx_ai.metanames import GenTextParamsMetaNames as GenParams
 
 from modelgrader.logging import get_logger
 
@@ -162,10 +163,10 @@ def query_model(
             model_id=model_id,
             api_client=client,
             params={
-                "max_new_tokens": max_tokens,
-                "temperature": temperature,
-                "decoding_method": "greedy",
-                "random_seed": 42,
+                GenParams.MAX_NEW_TOKENS: max_tokens,
+                GenParams.TEMPERATURE: temperature,
+                GenParams.DECODING_METHOD: "greedy",
+                GenParams.RANDOM_SEED: 42,
             },
         )
 

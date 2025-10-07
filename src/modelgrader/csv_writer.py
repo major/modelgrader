@@ -19,6 +19,7 @@ CSV_FIELDNAMES = [
     "Response time",
     "Weighted Score",
     "Percentile Rank",
+    "Explanation",
 ]
 
 
