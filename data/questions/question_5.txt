@@ -1,0 +1,11 @@
+A web application has been deployed on a RHEL 9 server running Apache (httpd). The application needs to:
+
+- Serve content from a non-standard directory /opt/webapp/public
+- Connect to a MySQL database on port 3306
+- Write uploaded files to /var/webapp/uploads
+- Listen on a custom port 8443 for HTTPS traffic
+
+After deployment, the application is experiencing multiple issues: Apache returns 403
+Forbidden errors, file uploads fail silently, and database connections are timing out.
+The system administrator suspects SELinux is blocking these operations. Your task is to
+diagnose and resolve all SELinux-related issues while keeping SELinux in enforcing mode.

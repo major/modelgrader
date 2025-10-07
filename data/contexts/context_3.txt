@@ -1,0 +1,62 @@
+Firewalld Configuration Guide
+
+Firewalld is the default firewall management tool in RHEL. Here's how to configure it for web traffic:
+
+1. Check firewalld status:
+   systemctl status firewalld
+   firewall-cmd --state
+
+2. Start and enable firewalld:
+   systemctl start firewalld
+   systemctl enable firewalld
+
+3. View current configuration:
+   firewall-cmd --list-all
+   firewall-cmd --get-active-zones
+   firewall-cmd --get-default-zone
+
+4. Add HTTP and HTTPS services:
+   firewall-cmd --permanent --add-service=http
+   firewall-cmd --permanent --add-service=https
+   firewall-cmd --reload
+
+5. Alternative: Add by port number:
+   firewall-cmd --permanent --add-port=80/tcp
+   firewall-cmd --permanent --add-port=443/tcp
+   firewall-cmd --reload
+
+6. Verify configuration:
+   firewall-cmd --list-services
+   firewall-cmd --list-ports
+
+7. Default zone behavior:
+   - public zone (default) already blocks incoming connections
+   - Only explicitly allowed services/ports are permitted
+   - Outgoing connections are allowed by default
+
+8. Set default zone (if needed):
+   firewall-cmd --set-default-zone=public
+
+9. Remove unwanted services:
+   firewall-cmd --permanent --remove-service=cockpit
+   firewall-cmd --permanent --remove-service=dhcpv6-client
+   firewall-cmd --reload
+
+10. Zone-specific rules:
+    firewall-cmd --zone=public --permanent --add-service=http
+    firewall-cmd --zone=public --permanent --add-service=https
+
+11. Rich rules for advanced control:
+    firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="192.168.1.0/24" service name="http" accept'
+
+Testing:
+- Use nmap from another host to verify ports
+- Check with: firewall-cmd --query-service=http
+- Monitor logs: journalctl -u firewalld -f
+
+Best practices:
+- Always use --permanent for persistent rules
+- Always reload after changes
+- Keep default zone as public for security
+- Document custom rules
+- Test before deploying to production

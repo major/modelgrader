@@ -1,0 +1,36 @@
+SELinux (Security-Enhanced Linux) Troubleshooting Guide
+
+When SELinux blocks an operation, it generates an AVC (Access Vector Cache) denial message. Here's how to troubleshoot:
+
+1. Check SELinux status:
+   - Run: sestatus
+   - Verify it's in Enforcing mode
+
+2. View denials in the audit log:
+   - Check /var/log/audit/audit.log
+   - Use: ausearch -m avc -ts recent
+   - Or: grep AVC /var/log/audit/audit.log
+
+3. Analyze denials with audit2why:
+   - Run: ausearch -m avc -ts recent | audit2why
+   - This explains why the denial occurred
+
+4. Generate policy modules:
+   - Use audit2allow to create custom policies
+   - Example: ausearch -m avc -ts recent | audit2allow -M mypolicy
+   - Install: semodule -i mypolicy.pp
+
+5. Use setroubleshoot for user-friendly messages:
+   - Install: yum install setroubleshoot-server
+   - View suggestions: sealert -a /var/log/audit/audit.log
+
+6. Common fixes:
+   - Fix file contexts: restorecon -Rv /path/to/files
+   - Set booleans: setsebool -P boolean_name on
+   - Relabel entire filesystem: touch /.autorelabel && reboot
+
+Best practices:
+- Never disable SELinux in production
+- Always investigate denials before creating custom policies
+- Use standard SELinux booleans when possible
+- Test policy changes in permissive mode first

@@ -1,0 +1,1 @@
+How do I configure firewalld to allow HTTP and HTTPS traffic while blocking all other incoming connections?

@@ -1,0 +1,57 @@
+Systemd Service Configuration Guide
+
+To create a reliable systemd service that starts on boot and restarts on failure:
+
+1. Create a service unit file:
+   Location: /etc/systemd/system/myservice.service
+
+2. Basic service file structure:
+   [Unit]
+   Description=My Application Service
+   After=network.target
+   Wants=network-online.target
+
+   [Service]
+   Type=simple
+   User=myuser
+   Group=mygroup
+   WorkingDirectory=/opt/myapp
+   ExecStart=/opt/myapp/bin/myapp
+   Restart=on-failure
+   RestartSec=10s
+   StandardOutput=journal
+   StandardError=journal
+
+   [Install]
+   WantedBy=multi-user.target
+
+3. Key directives explained:
+   - After: Ensures service starts after specified targets
+   - Wants: Soft dependency (won't fail if unavailable)
+   - Type: simple (default), forking, oneshot, notify, etc.
+   - Restart: always, on-failure, on-abnormal, on-abort, never
+   - RestartSec: Delay between restart attempts
+   - WantedBy: Enables service in specified target
+
+4. Enable and start the service:
+   systemctl daemon-reload
+   systemctl enable myservice.service
+   systemctl start myservice.service
+
+5. Verify status:
+   systemctl status myservice.service
+   systemctl is-enabled myservice.service
+
+6. Additional restart options:
+   StartLimitBurst=5
+   StartLimitIntervalSec=60s
+   (Prevents infinite restart loops)
+
+7. View logs:
+   journalctl -u myservice.service -f
+
+Best practices:
+- Always use daemon-reload after editing service files
+- Test service behavior with systemctl restart
+- Use proper User/Group for security
+- Set resource limits with LimitNOFILE, LimitNPROC, etc.

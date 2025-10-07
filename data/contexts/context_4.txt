@@ -1,0 +1,78 @@
+DNF Package Management Guide
+
+DNF (Dandified Yum) is the package manager for RHEL 8 and later. Here's how to manage specific package versions:
+
+1. Search for available versions:
+   dnf list --showduplicates package-name
+   dnf repoquery --showduplicates package-name
+
+2. Install a specific version:
+   dnf install package-name-version.architecture
+   Example: dnf install httpd-2.4.37-43.el8.x86_64
+
+3. Downgrade to a specific version:
+   dnf downgrade package-name-version
+
+4. View installed version:
+   dnf list installed package-name
+   rpm -qa | grep package-name
+
+5. Exclude package from updates (Method 1 - dnf.conf):
+   Edit /etc/dnf/dnf.conf
+   Add line: exclude=package-name
+   Or: exclude=package-name-version
+
+6. Exclude package from updates (Method 2 - versionlock plugin):
+   Install plugin:
+   dnf install python3-dnf-plugin-versionlock
+
+   Lock current version:
+   dnf versionlock add package-name
+
+   Lock specific version:
+   dnf versionlock add package-name-version
+
+   List locked packages:
+   dnf versionlock list
+
+   Remove lock:
+   dnf versionlock delete package-name
+
+   Clear all locks:
+   dnf versionlock clear
+
+7. Versionlock file location:
+   /etc/dnf/plugins/versionlock.list
+
+8. Update everything except locked packages:
+   dnf update
+   (Locked packages are automatically skipped)
+
+9. Override versionlock temporarily:
+   dnf update --disableplugin=versionlock
+
+10. View package information:
+    dnf info package-name
+    dnf info package-name-version
+
+11. Check dependencies:
+    dnf repoquery --requires package-name
+
+Common scenarios:
+
+Pin to specific major version:
+dnf versionlock add 'httpd-2.4.*'
+
+Lock multiple packages:
+dnf versionlock add httpd nginx php
+
+Remove all locks and update:
+dnf versionlock clear && dnf update
+
+Best practices:
+- Use versionlock plugin instead of exclude when possible
+- Document why packages are locked
+- Regularly review locked packages for security updates
+- Test version changes in development first
+- Consider using modules for application streams
+- Keep system packages updated except where specifically needed

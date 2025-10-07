@@ -1,0 +1,191 @@
+# SELinux Problem Resolution Guide - RHEL Web Application
+
+## Initial Diagnosis
+
+### Step 1: Verify SELinux Status
+```bash
+# Check if SELinux is enabled and in which mode
+getenforce
+
+# Get detailed SELinux status
+sestatus
+```
+
+### Step 2: Install Troubleshooting Tools
+```bash
+# Install SELinux troubleshooting utilities
+sudo dnf install -y setroubleshoot-server setools-console policycoreutils-python-utils
+
+# Restart auditd to ensure logging is working
+sudo systemctl restart auditd
+```
+
+### Step 3: Identify SELinux Denials
+```bash
+# Check for recent AVC denials (last 10 minutes)
+sudo ausearch -m AVC -ts recent
+
+# Alternative: Check audit log directly
+sudo grep "type=AVC" /var/log/audit/audit.log | tail -20
+
+# Generate human-readable reports from audit log
+sudo sealert -a /var/log/audit/audit.log
+```
+
+## Resolving Issue 1: Custom Document Root (/opt/webapp/public)
+
+### Step 4: Check Current Context
+```bash
+# View the current SELinux context of the directory
+ls -ldZ /opt/webapp/public
+```
+
+### Step 5: Set Correct File Context
+```bash
+# Add a file context rule for the web content directory
+sudo semanage fcontext -a -t httpd_sys_content_t '/opt/webapp/public(/.*)?'
+
+# Apply the new context to existing files
+sudo restorecon -Rv /opt/webapp/public
+
+# Verify the context was applied
+ls -ldZ /opt/webapp/public
+```
+
+## Resolving Issue 2: Custom Upload Directory (/var/webapp/uploads)
+
+### Step 6: Create and Configure Upload Directory
+```bash
+# Create the directory if it doesn't exist
+sudo mkdir -p /var/webapp/uploads
+
+# Set ownership to Apache user
+sudo chown apache:apache /var/webapp/uploads
+
+# Add file context for read/write access
+sudo semanage fcontext -a -t httpd_sys_rw_content_t '/var/webapp/uploads(/.*)?'
+
+# Apply the context
+sudo restorecon -Rv /var/webapp/uploads
+
+# Verify the context
+ls -ldZ /var/webapp/uploads
+```
+
+## Resolving Issue 3: Database Connection
+
+### Step 7: Enable Network Database Connections
+```bash
+# Check current boolean value
+getsebool httpd_can_network_connect_db
+
+# Enable httpd to connect to databases over the network
+sudo setsebool -P httpd_can_network_connect_db on
+
+# Verify the change
+getsebool httpd_can_network_connect_db
+```
+
+## Resolving Issue 4: Custom HTTPS Port (8443)
+
+### Step 8: Configure Custom Port
+```bash
+# Check if port 8443 is already defined
+sudo semanage port -l | grep 8443
+
+# Add port 8443 as an allowed HTTP port
+sudo semanage port -a -t http_port_t -p tcp 8443
+
+# If the port is already defined for another service, modify instead of add
+# sudo semanage port -m -t http_port_t -p tcp 8443
+
+# Verify the port was added
+sudo semanage port -l | grep 8443
+```
+
+## Apache Configuration Verification
+
+### Step 9: Update Apache Configuration
+```bash
+# Ensure Apache configuration includes the custom port
+sudo grep -n "Listen 8443" /etc/httpd/conf/httpd.conf /etc/httpd/conf.d/*.conf
+
+# If not present, add it
+echo "Listen 8443" | sudo tee -a /etc/httpd/conf.d/custom-ports.conf
+
+# Verify Apache configuration syntax
+sudo httpd -t
+```
+
+### Step 10: Restart Services
+```bash
+# Restart Apache to apply all changes
+sudo systemctl restart httpd
+
+# Check Apache status
+sudo systemctl status httpd
+```
+
+## Verification and Testing
+
+### Step 11: Verify All Changes
+```bash
+# List all custom file contexts
+sudo semanage fcontext -l -C
+
+# List all modified booleans
+sudo getsebool -a | grep httpd | grep -v "off$"
+
+# List custom port definitions
+sudo semanage port -l -C
+
+# Ensure SELinux is still enforcing
+getenforce
+```
+
+### Step 12: Test Application Functionality
+```bash
+# Test web content serving
+curl -I http://localhost/
+curl -I https://localhost:8443/
+
+# Test file upload (example with curl)
+echo "test content" > /tmp/test.txt
+curl -X POST -F "file=@/tmp/test.txt" http://localhost/upload
+
+# Check if uploaded file exists with correct context
+ls -lZ /var/webapp/uploads/
+
+# Test database connectivity (from the web server)
+sudo -u apache mysql -h localhost -u webapp_user -p -e "SELECT 1;"
+```
+
+### Step 13: Monitor for New Denials
+```bash
+# Clear the audit log timestamp for monitoring
+sudo ausearch -m AVC -ts now
+
+# Perform application operations, then check for new denials
+sudo ausearch -m AVC -ts recent
+
+# Watch audit log in real-time during testing
+sudo tail -f /var/log/audit/audit.log | grep "type=AVC"
+```
+
+## Troubleshooting Additional Issues
+
+### If Problems Persist:
+```bash
+# Generate a comprehensive SELinux report
+sudo sealert -a /var/log/audit/audit.log > /tmp/selinux-report.txt
+
+# Check for missing SELinux modules
+sudo semodule -l | grep http
+
+# Review all httpd-related booleans
+sudo getsebool -a | grep httpd
+
+# Create custom policy if needed (last resort)
+# sudo ausearch -m AVC -ts recent | audit2allow -M mywebapp
+# sudo semodule -i mywebapp.pp
+```
